@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>校園修繕小隊：單一規格修補與反例探索室</title>
+<style>
+  :root {
+    --primary: #1e3a8a;
+    --accent-a: #2563eb; /* 4格正方形 藍色 */
+    --accent-b: #ea580c; /* 2格長方形 橙色 */
+    --accent-c: #059669; /* 3格L形 綠色 */
+    --wall-hole: #cbd5e1;
+    --grid-size: 46px;
+    --star-gold: #fbbf24;
+  }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  body { margin: 0; padding: 12px; background: #e2e8f0; display: flex; flex-direction: column; align-items: center; user-select: none; }
+
+  header { text-align: center; margin-bottom: 8px; width: 100%; max-width: 920px; }
+  h1 { margin: 4px 0; color: var(--primary); font-size: 1.45rem; }
+
+  /* 頂部集星榮譽區 */
+  .star-tracker {
+    display: flex; justify-content: center; gap: 14px; background: #ffffff;
+    padding: 7px 18px; border-radius: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    margin: 6px auto; width: fit-content; border: 2px solid #e2e8f0;
+  }
+  .star-item { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: bold; color: #64748b; }
+  .star-icon { font-size: 1.25rem; filter: grayscale(100%); opacity: 0.3; transition: 0.3s transform, 0.3s filter; }
+  .star-item.earned .star-icon { filter: grayscale(0%); opacity: 1; transform: scale(1.15); }
+  .star-item.earned { color: #b45309; }
+
+  /* 關卡導覽 */
+  .level-nav { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; justify-content: center; }
+  .level-btn { padding: 8px 14px; border: 2px solid #94a3b8; background: #fff; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
+  .level-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+  .level-btn.custom-tab { border-color: #7c3aed; color: #7c3aed; }
+  .level-btn.custom-tab.active { background: #7c3aed; color: #fff; }
+
+  /* 主工作區 */
+  .workspace { display: flex; gap: 20px; background: #fff; padding: 18px; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); flex-wrap: wrap; justify-content: center; max-width: 960px; width: 100%; }
+  .panel { display: flex; flex-direction: column; align-items: center; }
+
+  /* 網格底板 */
+  .board-container { position: relative; border: 3px dashed #64748b; background: #f8fafc; padding: 6px; border-radius: 10px; }
+  .grid-board { display: grid; position: relative; }
+  .grid-cell { width: var(--grid-size); height: var(--grid-size); box-sizing: border-box; border: 1px solid rgba(255,255,255,0.45); }
+  .grid-cell.hole { background: var(--wall-hole); border: 1px solid #94a3b8; }
+  .grid-cell.wall { background: transparent; }
+  .grid-cell.paintable { cursor: pointer; transition: 0.1s background; }
+  .grid-cell.paintable:hover { background: #cbd5e1; }
+  .grid-cell.painted { background: #93c5fd !important; border: 1px solid #3b82f6 !important; }
+
+  /* 工具箱與單一款式選擇 */
+  .toolbox { display: flex; flex-direction: column; gap: 10px; min-width: 260px; max-width: 290px; }
+  .spec-notice { background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 8px; padding: 8px 10px; font-size: 0.82rem; color: #1e40af; line-height: 1.4; }
+  .tool-item { border: 2px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; background: #f8fafc; transition: 0.2s; position: relative; }
+  .tool-item.locked { opacity: 0.4; filter: grayscale(80%); pointer-events: none; }
+  .tool-item.selected { border-color: #0f766e; background: #f0fdf4; box-shadow: 0 0 0 2px #0f766e; }
+
+  .btn-select-model { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff; width: 100%; font-size: 0.86rem; margin-top: 6px; }
+  .btn-a { background: var(--accent-a); }
+  .btn-b { background: var(--accent-b); }
+  .btn-c { background: var(--accent-c); }
+  .btn-change-model { background: #64748b; color: white; padding: 5px 10px; font-size: 0.78rem; border: none; border-radius: 4px; cursor: pointer; margin-top: 4px; }
+
+  /* 瓷磚圖形樣式 */
+  .tile-container { position: absolute; cursor: move; z-index: 10; touch-action: none; }
+  .tile-block { position: absolute; width: var(--grid-size); height: var(--grid-size); border: 2px solid #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  .type-a .tile-block { background: rgba(37, 99, 235, 0.92); }
+  .type-b .tile-block { background: rgba(234, 88, 12, 0.92); }
+  .type-c .tile-block { background: rgba(5, 150, 105, 0.92); }
+  .rotate-badge { position: absolute; top: 2px; right: 2px; font-size: 11px; color: #ffeb3b; pointer-events: none; }
+
+  /* 控制按鈕列 */
+  .action-bar { display: flex; gap: 8px; margin-top: 14px; width: 100%; justify-content: center; flex-wrap: wrap; }
+  .btn-action { padding: 9px 16px; font-size: 0.92rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.15s; }
+  .btn-check { background: #16a34a; color: white; }
+  .btn-check:hover { background: #15803d; }
+  .btn-reset { background: #dc2626; color: white; }
+  .btn-lock { background: #7c3aed; color: white; }
+  .btn-ai-solve { background: #0284c7; color: white; }
+  .btn-ai-solve:hover { background: #0369a1; }
+
+  /* 提示對話方塊 */
+  .feedback-box { margin-top: 14px; padding: 12px 16px; border-radius: 8px; width: 100%; max-width: 720px; display: none; font-size: 0.93rem; line-height: 1.5; }
+  .feedback-box.success { background: #dcfce7; border: 2px solid #22c55e; color: #15803d; }
+  .feedback-box.hint { background: #fef9c3; border: 2px solid #eab308; color: #854d0e; }
+  .feedback-box.error { background: #fee2e2; border: 2px solid #ef4444; color: #b91c1c; }
+
+  .sandbox-info { background: #f5f3ff; border: 1.5px dashed #8b5cf6; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.86rem; color: #5b21b6; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏫 校園修繕小隊：破損舊牆修補與反例探索室</h1>
+  <div class="star-tracker">
+    <div class="star-item" id="star-lvl-0"><span class="star-icon">⭐</span> 禮堂修復星</div>
+    <div class="star-item" id="star-lvl-1"><span class="star-icon">⭐</span> Balcony修復星</div>
+    <div class="star-item" id="star-lvl-2"><span class="star-icon">⭐</span> 教員室修復星</div>
+    <div class="star-item" id="star-lvl-3"><span class="star-icon">⭐</span> 反例大師星</div>
+  </div>
+</header>
+
+<div class="level-nav">
+  <button class="level-btn active" onclick="switchLevel(0)">1. 禮堂 (L形/12格)</button>
+  <button class="level-btn" onclick="switchLevel(1)">2. Balcony (凸字形/16格)</button>
+  <button class="level-btn" onclick="switchLevel(2)">3. 教員室 (階梯形/12格)</button>
+  <button class="level-btn custom-tab" onclick="switchLevel(3)">4. 🌟 極限自擬挑戰 (雙數反例)</button>
+</div>
+
+<div class="workspace">
+  <div class="panel">
+    <div id="sandbox-controls" class="sandbox-info" style="display:none;">
+      <b>🎨 自擬題目設計：</b>點擊方格挖出破損圖形。<br>
+      目前選取格數：<b><span id="custom-grid-count">0</span></b> 格 
+      <span id="parity-status" style="margin-left:8px; font-weight:bold;">(請選雙數格)</span>
+    </div>
+
+    <div class="board-container">
+      <div id="grid-board" class="grid-board"></div>
+    </div>
+
+    <div class="action-bar">
+      <button id="btn-lock-board" class="btn-action btn-lock" style="display:none;" onclick="toggleLockCustomBoard()">🔒 鎖定題目，進入修繕測試</button>
+      <button id="btn-check" class="btn-action btn-check" onclick="checkSolution()">🔍 檢查修繕成果</button>
+      <button id="btn-ai-solve" class="btn-action btn-ai-solve" style="display:none;" onclick="runAiDiagnosis()">🤖 系統智慧診斷：真的拼不滿嗎？</button>
+      <button class="btn-action btn-reset" onclick="resetCurrentTiles()">🔄 清空磁磚重拼</button>
+    </div>
+  </div>
+
+  <div class="toolbox">
+    <div class="spec-notice">
+      ⚠️ <b>工程規範要求：</b><br>
+      為保持施工美觀與統一規格，<b>每個地點每次只能選用一款磁磚</b>！
+    </div>
+
+    <div id="current-model-status" style="display:none; text-align:center; font-size:0.86rem; font-weight:bold; color:#0f766e; background:#ccfbf1; padding:6px; border-radius:6px;">
+      當前選用：<span id="active-model-name">A款</span>
+      <br><button class="btn-change-model" onclick="releaseTileSelection()">更換其他款式</button>
+    </div>
+
+    <!-- A款 -->
+    <div class="tool-item" id="tool-item-A">
+      <strong>A 款：正方形 (4格)</strong>
+      <div style="font-size:0.75rem; color:#64748b;">規格：2 × 2</div>
+      <button id="btn-add-A" class="btn-select-model btn-a" onclick="handleTileAction('A')">選用 A 款並領取</button>
+    </div>
+
+    <!-- B款 -->
+    <div class="tool-item" id="tool-item-B">
+      <strong>B 款：長方形 (2格)</strong>
+      <div style="font-size:0.75rem; color:#64748b;">規格：1 × 2 (可旋轉 90°)</div>
+      <button id="btn-add-B" class="btn-select-model btn-b" onclick="handleTileAction('B')">選用 B 款並領取</button>
+    </div>
+
+    <!-- C款 -->
+    <div class="tool-item" id="tool-item-C">
+      <strong>C 款：L形三連方 (3格)</strong>
+      <div style="font-size:0.75rem; color:#64748b;">規格：2+1 格 (可 4 向旋轉)</div>
+      <button id="btn-add-C" class="btn-select-model btn-c" onclick="handleTileAction('C')">選用 C 款並領取</button>
+    </div>
+
+    <div style="font-size: 0.8rem; color:#64748b; line-height:1.4; padding: 6px; background:#f1f5f9; border-radius:6px;">
+      💡 <b>操作小秘訣：</b><br>
+      • 拖動瓷磚至底板自動磁吸。<br>
+      • <b>輕觸點擊</b> B款/C款 瓷磚可旋轉。<br>
+      • <b>雙擊 (Double Click)</b> 任意瓷磚可收回。
+    </div>
+  </div>
+</div>
+
+<div id="feedback" class="feedback-box"></div>
+
+<script>
+const GRID_SIZE = 46;
+
+// 瓷磚相對坐標 (dx, dy)
+const TILE_SHAPES = {
+  A: [
+    [[0,0], [1,0], [0,1], [1,1]]
+  ],
+  B: [
+    [[0,0], [0,1]], // 直立
+    [[0,0], [1,0]]  // 橫放
+  ],
+  C: [
+    [[0,0], [0,1], [1,1]], // L形 0°
+    [[0,0], [1,0], [0,1]], // 90°
+    [[0,0], [1,0], [1,1]], // 180°
+    [[1,0], [0,1], [1,1]]  // 270°
+  ]
+};
+
+const levels = [
+  {
+    name: "禮堂 L形 (12格)", cols: 4, rows: 4,
+    holes: [
+      [0,0], [1,0],
+      [0,1], [1,1],
+      [0,2], [1,2], [2,2], [3,2],
+      [0,3], [1,3], [2,3], [3,3]
+    ]
+  },
+  {
+    name: "Balcony 凸字形 (16格)", cols: 6, rows: 4,
+    holes: [
+                    [2,0], [3,0],
+                    [2,1], [3,1],
+      [0,2], [1,2], [2,2], [3,2], [4,2], [5,2],
+      [0,3], [1,3], [2,3], [3,3], [4,3], [5,3]
+    ]
+  },
+  {
+    name: "教員室 階梯形 (12格)", cols: 6, rows: 3,
+    holes: [
+      [0,0], [1,0],
+      [0,1], [1,1], [2,1], [3,1],
+      [0,2], [1,2], [2,2], [3,2], [4,2], [5,2]
+    ]
+  },
+  {
+    name: "極限自擬挑戰", cols: 6, rows: 6,
+    isCustom: true,
+    holes: []
+  }
+];
+
+let currentLevelIdx = 0;
+let placedTiles = [];
+let earnedStars = [false, false, false, false];
+let customDesigning = true;
+let selectedTileModel = null; // 當前地點鎖定的唯一磁磚款式 ('A', 'B', 'C' 或 null)
+
+function initLevel() {
+  const lvl = levels[currentLevelIdx];
+  const board = document.getElementById("grid-board");
+  board.style.gridTemplateColumns = `repeat(${lvl.cols}, ${GRID_SIZE}px)`;
+  board.style.gridTemplateRows = `repeat(${lvl.rows}, ${GRID_SIZE}px)`;
+  board.innerHTML = '';
+  placedTiles = [];
+  selectedTileModel = null;
+  updateToolboxSelectionState();
+  hideFeedback();
+
+  const sandboxCtrl = document.getElementById("sandbox-controls");
+  const lockBtn = document.getElementById("btn-lock-board");
+  const checkBtn = document.getElementById("btn-check");
+  const aiBtn = document.getElementById("btn-ai-solve");
+
+  if (lvl.isCustom) {
+    sandboxCtrl.style.display = "block";
+    lockBtn.style.display = "inline-block";
+    customDesigning = true;
+    lockBtn.innerText = "🔒 鎖定題目，進入修繕測試";
+    checkBtn.style.display = "none";
+    aiBtn.style.display = "none";
+    updateCustomGridDisplay();
+  } else {
+    sandboxCtrl.style.display = "none";
+    lockBtn.style.display = "none";
+    checkBtn.style.display = "inline-block";
+    aiBtn.style.display = "none";
+  }
+
+  for (let r = 0; r < lvl.rows; r++) {
+    for (let c = 0; c < lvl.cols; c++) {
+      const cell = document.createElement("div");
+      if (lvl.isCustom) {
+        const isSelected = lvl.holes.some(([x, y]) => x === c && y === r);
+        cell.className = `grid-cell paintable ${isSelected ? 'painted' : 'wall'}`;
+        cell.onclick = () => toggleCustomCell(c, r);
+      } else {
+        const isHole = lvl.holes.some(([x, y]) => x === c && y === r);
+        cell.className = `grid-cell ${isHole ? 'hole' : 'wall'}`;
+      }
+      board.appendChild(cell);
+    }
+  }
+}
+
+function switchLevel(idx) {
+  currentLevelIdx = idx;
+  document.querySelectorAll(".level-btn").forEach((btn, i) => {
+    btn.classList.toggle("active", i === idx);
+  });
+  initLevel();
+}
+
+// 處理單一款式挑選與領取
+function handleTileAction(type) {
+  if (currentLevelIdx === 3 && customDesigning) {
+    showFeedback("💡 請先完成自擬題目的方格設計，並點擊「🔒 鎖定題目」後再選取磁磚！", "hint");
+    return;
+  }
+
+  if (!selectedTileModel) {
+    selectedTileModel = type;
+    updateToolboxSelectionState();
+  }
+
+  if (selectedTileModel === type) {
+    createTile(type);
+    if (currentLevelIdx === 3 && !customDesigning) {
+      document.getElementById("btn-ai-solve").style.display = "inline-block";
+    }
+  }
+}
+
+function updateToolboxSelectionState() {
+  const statusEl = document.getElementById("current-model-status");
+  const types = ['A', 'B', 'C'];
+
+  if (selectedTileModel) {
+    statusEl.style.display = "block";
+    document.getElementById("active-model-name").innerText = `${selectedTileModel} 款`;
+    types.forEach(t => {
+      const item = document.getElementById(`tool-item-${t}`);
+      const btn = document.getElementById(`btn-add-${t}`);
+      if (t === selectedTileModel) {
+        item.className = "tool-item selected";
+        btn.innerText = `＋ 領取 ${t} 款磚`;
+      } else {
+        item.className = "tool-item locked";
+        btn.innerText = "已鎖定 (限用單一款)";
+      }
+    });
+  } else {
+    statusEl.style.display = "none";
+    types.forEach(t => {
+      const item = document.getElementById(`tool-item-${t}`);
+      const btn = document.getElementById(`btn-add-${t}`);
+      item.className = "tool-item";
+      btn.innerText = `選用 ${t} 款並領取`;
+    });
+  }
+}
+
+function releaseTileSelection() {
+  resetCurrentTiles();
+  selectedTileModel = null;
+  updateToolboxSelectionState();
+  showFeedback("已解除磁磚規格限制，你可以重新選擇其他款式進行修繕！", "hint");
+}
+
+function toggleCustomCell(c, r) {
+  if (!customDesigning) return;
+  const lvl = levels[3];
+  const idx = lvl.holes.findIndex(([x, y]) => x === c && y === r);
+  if (idx >= 0) lvl.holes.splice(idx, 1);
+  else lvl.holes.push([c, r]);
+  initLevel();
+}
+
+function updateCustomGridDisplay() {
+  const count = levels[3].holes.length;
+  document.getElementById("custom-grid-count").innerText = count;
+  const statusEl = document.getElementById("parity-status");
+  const lockBtn = document.getElementById("btn-lock-board");
+
+  if (count === 0) {
+    statusEl.innerText = "(請點擊方格繪製圖形)";
+    statusEl.style.color = "#64748b";
+    lockBtn.disabled = true;
+  } else if (count % 2 === 0) {
+    statusEl.innerText = "✅ 符合雙數要求！可以鎖定驗證";
+    statusEl.style.color = "#16a34a";
+    lockBtn.disabled = false;
+  } else {
+    statusEl.innerText = "⚠️ 當前為單數格，請增減 1 格湊成雙數！";
+    statusEl.style.color = "#dc2626";
+    lockBtn.disabled = true;
+  }
+}
+
+function toggleLockCustomBoard() {
+  const lvl = levels[3];
+  if (lvl.holes.length === 0 || lvl.holes.length % 2 !== 0) return;
+
+  customDesigning = !customDesigning;
+  const lockBtn = document.getElementById("btn-lock-board");
+  const checkBtn = document.getElementById("btn-check");
+
+  if (!customDesigning) {
+    lockBtn.innerText = "✏️ 解鎖重畫底板";
+    checkBtn.style.display = "inline-block";
+    showFeedback(`🔒 <b>題目已鎖定（共 ${lvl.holes.length} 格雙數）！</b><br>請在右側選擇<b>單一款式磁磚</b>，嘗試鋪滿自擬的牆面。盡量拼砌後，可點擊「🤖 系統智慧診斷」讓系統為你驗證這是否為不可解的反例！`, "hint");
+  } else {
+    lockBtn.innerText = "🔒 鎖定題目，進入修繕測試";
+    checkBtn.style.display = "none";
+    document.getElementById("btn-ai-solve").style.display = "none";
+    releaseTileSelection();
+  }
+}
+
+// 產生與控制瓷磚
+function createTile(type) {
+  const board = document.getElementById("grid-board");
+  const tileEl = document.createElement("div");
+  const tileData = {
+    id: Date.now() + Math.random(),
+    type: type,
+    rotIdx: 0,
+    x: 0,
+    y: 0,
+    el: tileEl
+  };
+
+  tileEl.className = `tile-container type-${type.toLowerCase()}`;
+  renderTileBlocks(tileData);
+  enableDrag(tileEl, tileData);
+
+  // 點擊旋轉
+  tileEl.addEventListener('click', () => {
+    if (tileEl.dataset.isDragging === 'true') return;
+    const maxRot = TILE_SHAPES[type].length;
+    if (maxRot > 1) {
+      tileData.rotIdx = (tileData.rotIdx + 1) % maxRot;
+      renderTileBlocks(tileData);
+      snapToGrid(tileEl, tileData);
+    }
+  });
+
+  // 雙擊收回
+  tileEl.addEventListener('dblclick', () => {
+    tileEl.remove();
+    placedTiles = placedTiles.filter(t => t.id !== tileData.id);
+  });
+
+  board.appendChild(tileEl);
+  placedTiles.push(tileData);
+}
+
+function renderTileBlocks(tileData) {
+  const coords = TILE_SHAPES[tileData.type][tileData.rotIdx];
+  tileData.el.innerHTML = '';
+
+  coords.forEach(([dx, dy]) => {
+    const block = document.createElement("div");
+    block.className = "tile-block";
+    block.style.left = `${dx * GRID_SIZE}px`;
+    block.style.top = `${dy * GRID_SIZE}px`;
+    block.innerHTML = `${tileData.type}`;
+    tileData.el.appendChild(block);
+  });
+
+  if (TILE_SHAPES[tileData.type].length > 1) {
+    const badge = document.createElement("span");
+    badge.className = "rotate-badge";
+    badge.innerText = "↻";
+    tileData.el.appendChild(badge);
+  }
+}
+
+function enableDrag(elm, data) {
+  let startX, startY, origLeft, origTop;
+
+  elm.addEventListener('mousedown', dragStart);
+  elm.addEventListener('touchstart', dragStart, {passive: false});
+
+  function dragStart(e) {
+    e.preventDefault();
+    elm.dataset.isDragging = 'false';
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    startX = clientX;
+    startY = clientY;
+    origLeft = parseInt(elm.style.left || '0', 10);
+    origTop = parseInt(elm.style.top || '0', 10);
+
+    document.addEventListener('mousemove', dragMove);
+    document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('touchmove', dragMove, {passive: false});
+    document.addEventListener('touchend', dragEnd);
+  }
+
+  function dragMove(e) {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    if (Math.hypot(clientX - startX, clientY - startY) > 5) elm.dataset.isDragging = 'true';
+    elm.style.left = `${origLeft + (clientX - startX)}px`;
+    elm.style.top = `${origTop + (clientY - startY)}px`;
+  }
+
+  function dragEnd() {
+    document.removeEventListener('mousemove', dragMove);
+    document.removeEventListener('mouseup', dragEnd);
+    document.removeEventListener('touchmove', dragMove);
+    document.removeEventListener('touchend', dragEnd);
+    snapToGrid(elm, data);
+  }
+}
+
+function snapToGrid(elm, data) {
+  let left = parseInt(elm.style.left || '0', 10);
+  let top = parseInt(elm.style.top || '0', 10);
+  let gridX = Math.round(left / GRID_SIZE);
+  let gridY = Math.round(top / GRID_SIZE);
+
+  data.x = gridX;
+  data.y = gridY;
+  elm.style.left = `${gridX * GRID_SIZE}px`;
+  elm.style.top = `${gridY * GRID_SIZE}px`;
+}
+
+function checkSolution() {
+  const lvl = levels[currentLevelIdx];
+  const totalHoles = lvl.holes.length;
+
+  if (totalHoles === 0) {
+    showFeedback("底板上沒有任何破損需要修補喔！", "hint");
+    return;
+  }
+
+  const occupied = new Map();
+  let hasOverlap = false;
+  let hasOutOfBounds = false;
+
+  placedTiles.forEach(tile => {
+    const coords = TILE_SHAPES[tile.type][tile.rotIdx];
+    coords.forEach(([dx, dy]) => {
+      const cx = tile.x + dx;
+      const cy = tile.y + dy;
+      const key = `${cx},${cy}`;
+      const isHole = lvl.holes.some(([x, y]) => x === cx && y === cy);
+
+      if (!isHole) hasOutOfBounds = true;
+      if (occupied.has(key)) hasOverlap = true;
+      else occupied.set(key, true);
+    });
+  });
+
+  const filledCount = occupied.size;
+
+  if (hasOutOfBounds || hasOverlap) {
+    showFeedback("⚠️ <b>磁磚重疊或超出邊界了！</b><br>請謹記施工規範：『邊與邊完全貼合、不重疊、不越界』。", "error");
+  } else if (filledCount === totalHoles) {
+    awardStar(currentLevelIdx);
+    if (currentLevelIdx === 3) {
+      showFeedback(`🎉 <b>厲害！你自擬的雙數圖形（${totalHoles} 格）被 ${selectedTileModel} 款完全鋪滿！</b><br>這證明了這個圖形可以用單一規格拼成。如果想反駁小明，試試看設計一個連系統都解不開的圖形吧！`, "success");
+    } else {
+      showFeedback(`🌟 <b>恭喜！單一規格修復大成功！</b><br>你成功只使用 <b>${selectedTileModel} 款瓷磚</b> 鋪滿了破損區域（共 ${totalHoles} 格）！榮譽星已為你點亮！⭐`, "success");
+    }
+  } else {
+    const remain = totalHoles - filledCount;
+    showFeedback(`💡 <b>修繕進度回報：</b>目前已填補 ${filledCount} 格，尚有 <b>${remain} 格</b> 空隙！仔細觀察旋轉方向，如果這款瓷磚真的無法吻合角落，可點選「更換其他款式」嘗試！`, "hint");
+  }
+}
+
+// ==========================================
+// 核心：自擬題幾何智慧診斷求解器 (Backtracking Solver)
+// ==========================================
+function runAiDiagnosis() {
+  const lvl = levels[3];
+  const totalHoles = lvl.holes.length;
+
+  if (placedTiles.length === 0) {
+    showFeedback("請同學先嘗試在底板上擺放瓷磚，盡量拼砌鋪滿 1 次後，再來請教系統喔！", "hint");
+    return;
+  }
+
+  // 測試 A、B、C 款各自是否具備完全鋪滿的解法
+  const canSolveA = (totalHoles % 4 === 0) && solveExactCover(lvl.holes, 'A');
+  const canSolveB = (totalHoles % 2 === 0) && solveExactCover(lvl.holes, 'B');
+  const canSolveC = (totalHoles % 3 === 0) && solveExactCover(lvl.holes, 'C');
+
+  let solvableTypes = [];
+  if (canSolveA) solvableTypes.push("A 款 (4格正方形)");
+  if (canSolveB) solvableTypes.push("B 款 (2格長方形)");
+  if (canSolveC) solvableTypes.push("C 款 (3格L形)");
+
+  if (solvableTypes.length > 0) {
+    // 依然可以被拼滿
+    const suggest = solvableTypes.join(" 或 ");
+    showFeedback(`🧐 <b>系統智慧診斷分析：</b><br>
+    同學你的嘗試非常認真！但經過系統精密演算，你自擬的這面雙數牆（共 ${totalHoles} 格）其實<b>「依然可以被完全拼滿」</b>喔！<br>
+    💡 <b>給你的探究提示：</b>不要灰心，這代表圖形藏有巧妙的對稱結構！建議你點擊更換款式，嘗試換用 <b>【${suggest}】</b> 再試一次！`, "hint");
+  } else {
+    // 真正的幾何反例！
+    awardStar(3);
+    showFeedback(`🎉 <b>太震撼了！你成功創造出真正的「反例論證圖形」！</b><br>
+    經系統演算法深度驗證：你設計的這面牆雖然是 <b>${totalHoles} 格雙數</b>，但無論用 A、B 或 C 款磁磚，在空間轉角與拓撲連續性上<b>絕對無法完全拼滿</b>！<br>
+    你成功推翻了小明『雙數就一定能拼滿』的迷思！已為你頒發最崇高的<b>「反例大師星」⭐</b>！`, "success");
+  }
+}
+
+// 快速幾何回溯遞歸求解器
+function solveExactCover(holesList, type) {
+  const targetKeys = new Set(holesList.map(([x, y]) => `${x},${y}`));
+  const orientations = TILE_SHAPES[type];
+  let stepLimit = 15000; // 防止深層運算阻塞
+
+  function canFit(unfilled) {
+    if (unfilled.size === 0) return true;
+    if (--stepLimit <= 0) return false;
+
+    // 取左上角第一個未覆蓋方格
+    let firstKey = null;
+    for (let k of unfilled) { firstKey = k; break; }
+    const [fx, fy] = firstKey.split(',').map(Number);
+
+    // 嘗試各種旋轉方向與偏移
+    for (let rot of orientations) {
+      for (let [ox, oy] of rot) {
+        const originX = fx - ox;
+        const originY = fy - oy;
+
+        let validPlacement = true;
+        let placedKeys = [];
+
+        for (let [dx, dy] of rot) {
+          const checkKey = `${originX + dx},${originY + dy}`;
+          if (!unfilled.has(checkKey)) {
+            validPlacement = false;
+            break;
+          }
+          placedKeys.push(checkKey);
+        }
+
+        if (validPlacement) {
+          placedKeys.forEach(k => unfilled.delete(k));
+          if (canFit(unfilled)) return true;
+          placedKeys.forEach(k => unfilled.add(k)); // 回溯
+        }
+      }
+    }
+    return false;
+  }
+
+  return canFit(new Set(targetKeys));
+}
+
+function awardStar(idx) {
+  earnedStars[idx] = true;
+  const starEl = document.getElementById(`star-lvl-${idx}`);
+  if (starEl) starEl.classList.add("earned");
+}
+
+function showFeedback(msg, type) {
+  const fb = document.getElementById("feedback");
+  fb.className = `feedback-box ${type}`;
+  fb.innerHTML = msg;
+  fb.style.display = "block";
+}
+
+function hideFeedback() {
+  const fb = document.getElementById("feedback");
+  fb.style.display = "none";
+}
+
+function resetCurrentTiles() {
+  placedTiles.forEach(t => t.el.remove());
+  placedTiles = [];
+  hideFeedback();
+}
+
+window.onload = () => initLevel();
+</script>
+</body>
+</html>
