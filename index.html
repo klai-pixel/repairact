@@ -108,7 +108,7 @@
   }
   .btn-rotate-large:active { transform: scale(0.97); }
 
-  /* 瓷磚圖形與 iPad 專屬按鈕樣式 */
+  /* 瓷磚圖形樣式 */
   .tile-container { position: absolute; cursor: move; z-index: 10; touch-action: none; }
   .tile-container.active-tile { z-index: 30; }
   .tile-block { position: absolute; width: var(--grid-size); height: var(--grid-size); border: 2px solid #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
@@ -156,6 +156,7 @@
   .btn-check { background: #16a34a; color: white; }
   .btn-reset { background: #dc2626; color: white; }
   .btn-lock { background: #7c3aed; color: white; }
+  .btn-lock:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
   .btn-ai-solve { background: #0284c7; color: white; }
 
   /* 提示對話方塊 */
@@ -164,7 +165,7 @@
   .feedback-box.hint { background: #fef9c3; border: 2px solid #eab308; color: #854d0e; }
   .feedback-box.error { background: #fee2e2; border: 2px solid #ef4444; color: #b91c1c; }
 
-  .sandbox-info { background: #f5f3ff; border: 1.5px dashed #8b5cf6; padding: 8px; border-radius: 8px; margin-bottom: 8px; font-size: 0.83rem; color: #5b21b6; line-height: 1.4; }
+  .sandbox-info { background: #f5f3ff; border: 1.5px dashed #8b5cf6; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-size: 0.83rem; color: #5b21b6; line-height: 1.5; max-width: 420px; }
 </style>
 </head>
 <body>
@@ -189,9 +190,13 @@
 <div class="workspace">
   <div class="panel">
     <div id="sandbox-controls" class="sandbox-info" style="display:none;">
-      <b>🎨 自擬題目設計：</b>點擊方格挖出破損圖形。<br>
-      目前選取格數：<b><span id="custom-grid-count">0</span></b> 格 
-      <span id="parity-status" style="margin-left:8px; font-weight:bold;">(請選雙數格)</span>
+      <b>🎨 自擬題目設計限制：</b><br>
+      1. 總格數必須為<b>雙數格</b>。<br>
+      2. 格與格之間必須<b>有一條邊相連</b>（形成單一多邊形，不可分離或僅角對角碰觸）。<br>
+      <div style="margin-top:6px; padding:4px 8px; background:#fff; border-radius:6px; border:1px solid #ddd;">
+        選取格數：<b><span id="custom-grid-count">0</span></b> 格 
+        <div id="design-validation-status" style="font-weight:bold; margin-top:2px;">(請點擊方格繪製圖形)</div>
+      </div>
     </div>
 
     <div class="board-container">
@@ -199,7 +204,7 @@
     </div>
 
     <div class="action-bar">
-      <button id="btn-lock-board" class="btn-action btn-lock" style="display:none;" onclick="toggleLockCustomBoard()">🔒 鎖定題目，進入修繕測試</button>
+      <button id="btn-lock-board" class="btn-action btn-lock" style="display:none;" onclick="toggleLockCustomBoard()" disabled>🔒 鎖定題目，進入修繕測試</button>
       <button id="btn-check" class="btn-action btn-check" onclick="checkSolution()">🔍 檢查修繕成果</button>
       <button id="btn-ai-solve" class="btn-action btn-ai-solve" style="display:none;" onclick="runAiDiagnosis()">🤖 系統智慧診斷：真的拼不滿嗎？</button>
       <button class="btn-action btn-reset" onclick="resetCurrentTiles()">🔄 清空磁磚重拼</button>
@@ -438,22 +443,62 @@ function toggleCustomCell(c, r) {
   initLevel();
 }
 
+// 邊相連連通多邊形檢查演算法 (BFS Edge-Connected Check)
+function checkEdgeConnected(holesList) {
+  if (holesList.length === 0) return false;
+  if (holesList.length === 1) return true;
+
+  const holeSet = new Set(holesList.map(([x, y]) => `${x},${y}`));
+  const visited = new Set();
+  const queue = [holesList[0]];
+  visited.add(`${holesList[0][0]},${holesList[0][1]}`);
+
+  while (queue.length > 0) {
+    const [cx, cy] = queue.shift();
+    const neighbors = [
+      [cx + 1, cy],
+      [cx - 1, cy],
+      [cx, cy + 1],
+      [cx, cy - 1]
+    ];
+    for (const [nx, ny] of neighbors) {
+      const key = `${nx},${ny}`;
+      if (holeSet.has(key) && !visited.has(key)) {
+        visited.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+  }
+
+  return visited.size === holesList.length;
+}
+
 function updateCustomGridDisplay() {
-  const count = levels[3].holes.length;
+  const holes = levels[3].holes;
+  const count = holes.length;
   document.getElementById("custom-grid-count").innerText = count;
-  const statusEl = document.getElementById("parity-status");
+  const statusEl = document.getElementById("design-validation-status");
   const lockBtn = document.getElementById("btn-lock-board");
 
   if (count === 0) {
     statusEl.innerText = "(請點擊方格繪製圖形)";
     statusEl.style.color = "#64748b";
     lockBtn.disabled = true;
-  } else if (count % 2 === 0) {
-    statusEl.innerText = "✅ 符合雙數要求！可以鎖定驗證";
+    return;
+  }
+
+  const isEven = (count % 2 === 0);
+  const isConnected = checkEdgeConnected(holes);
+
+  if (isEven && isConnected) {
+    statusEl.innerHTML = "✅ 符合雙數要求，且所有方格邊相連！可以鎖定";
     statusEl.style.color = "#16a34a";
     lockBtn.disabled = false;
   } else {
-    statusEl.innerText = "⚠️ 當前為單數格，請增減 1 格湊成雙數！";
+    let reasons = [];
+    if (!isEven) reasons.push("必須為雙數格（現為 " + count + " 格）");
+    if (!isConnected) reasons.push("格子之間必須邊相連（不可分開或僅角對角碰觸）");
+    statusEl.innerHTML = `⚠️ 尚未符合要求：${reasons.join("；")}`;
     statusEl.style.color = "#dc2626";
     lockBtn.disabled = true;
   }
@@ -461,7 +506,13 @@ function updateCustomGridDisplay() {
 
 function toggleLockCustomBoard() {
   const lvl = levels[3];
-  if (lvl.holes.length === 0 || lvl.holes.length % 2 !== 0) return;
+  const count = lvl.holes.length;
+  const isConnected = checkEdgeConnected(lvl.holes);
+
+  if (count === 0 || count % 2 !== 0 || !isConnected) {
+    showFeedback("⚠️ 自擬題目必須是<b>雙數格</b>，且<b>格與格之間必須有一條邊相連</b>（形成單一完整多邊形）！", "error");
+    return;
+  }
 
   customDesigning = !customDesigning;
   const board = document.getElementById("grid-board");
@@ -472,7 +523,7 @@ function toggleLockCustomBoard() {
     board.classList.add("testing-mode");
     lockBtn.innerText = "✏️ 解鎖重畫底板";
     checkBtn.style.display = "inline-block";
-    showFeedback(`🔒 <b>題目已鎖定（共 ${lvl.holes.length} 格雙數）！</b><br>請在右側選擇<b>單一款式磁磚</b>，嘗試鋪滿自擬的牆面。盡量拼砌後，可點擊「🤖 系統智慧診斷」讓系統為你驗證這是否為不可解的反例！`, "hint");
+    showFeedback(`🔒 <b>題目已鎖定（共 ${lvl.holes.length} 格雙數，連通多邊形）！</b><br>請在右側選擇<b>單一款式磁磚</b>，嘗試鋪滿自擬的牆面。盡量拼砌後，可點擊「🤖 系統智慧診斷」讓系統為你驗證這是否為不可解的反例！`, "hint");
   } else {
     board.classList.remove("testing-mode");
     lockBtn.innerText = "🔒 鎖定題目，進入修繕測試";
@@ -606,7 +657,6 @@ function enableDrag(elm, data) {
   elm.addEventListener('touchstart', dragStart, {passive: false});
 
   function dragStart(e) {
-    // 若點擊的是按鈕本體，則不啟動拖動
     if (e.target.classList.contains('tile-btn')) return;
 
     setActiveTile(data);
@@ -644,7 +694,6 @@ function enableDrag(elm, data) {
     snapToGrid(elm, data);
 
     const elapsed = Date.now() - touchStartTime;
-    // 若手指位移小且點擊時間短，直接視為輕觸本體旋轉
     if (!hasMoved && elapsed < 350) {
       rotateTile(data);
     }
@@ -697,7 +746,7 @@ function checkSolution() {
   } else if (filledCount === totalHoles) {
     awardStar(currentLevelIdx);
     if (currentLevelIdx === 3) {
-      showFeedback(`🎉 <b>厲害！你自擬的雙數圖形（${totalHoles} 格）被 ${selectedTileModel} 款完全鋪滿！</b><br>這證明了這個圖形可以用單一規格拼成。如果想反駁小明，試試看設計一個連系統都解不開的圖形吧！`, "success");
+      showFeedback(`🎉 <b>厲害！你自擬的雙數連通圖形（${totalHoles} 格）被 ${selectedTileModel} 款完全鋪滿！</b><br>這證明了這個圖形可以用單一規格拼成。如果想反駁小明，試試看設計一個連系統都解不開的反例吧！`, "success");
     } else {
       showFeedback(`🌟 <b>恭喜！單一規格修復大成功！</b><br>你成功只使用 <b>${selectedTileModel} 款瓷磚</b> 鋪滿了破損區域（共 ${totalHoles} 格）！榮譽星已為你點亮！⭐`, "success");
     }
@@ -729,12 +778,12 @@ function runAiDiagnosis() {
   if (solvableTypes.length > 0) {
     const suggest = solvableTypes.join(" 或 ");
     showFeedback(`🧐 <b>系統智慧診斷分析：</b><br>
-    同學你的嘗試非常認真！但經過系統精密演算，你自擬的這面雙數牆（共 ${totalHoles} 格）其實<b>「依然可以被完全拼滿」</b>喔！<br>
+    同學你的嘗試非常認真！但經過系統精密演算，你自擬的這面連通雙數牆（共 ${totalHoles} 格）其實<b>「依然可以被完全拼滿」</b>喔！<br>
     💡 <b>給你的探究提示：</b>不要灰心，這代表圖形藏有巧妙的對稱結構！建議你點擊更換款式，嘗試換用 <b>【${suggest}】</b> 再試一次！`, "hint");
   } else {
     awardStar(3);
     showFeedback(`🎉 <b>太震撼了！你成功創造出真正的「反例論證圖形」！</b><br>
-    經系統演算法深度驗證：你設計的這面牆雖然是 <b>${totalHoles} 格雙數</b>，但無論用 A、B 或 C 款磁磚，在空間轉角與拓撲連續性上<b>絕對無法完全拼滿</b>！<br>
+    經系統演算法深度驗證：你設計的這面牆雖然是 <b>${totalHoles} 格雙數</b> 且為 <b>邊相連多邊形</b>，但無論用 A、B 或 C 款磁磚，在空間轉角與拓撲結構上<b>絕對無法完全拼滿</b>！<br>
     你成功推翻了小明『雙數就一定能拼滿』的迷思！已為你頒發最崇高的<b>「反例大師星」⭐</b>！`, "success");
   }
 }
